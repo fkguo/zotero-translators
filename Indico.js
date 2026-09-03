@@ -9,7 +9,7 @@
 	"inRepository": true,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2025-11-20 21:29:44"
+	"lastUpdated": "2026-09-03 20:52:35"
 }
 
 /*
@@ -36,86 +36,12 @@
 */
 
 /**
- * Helper function to convert LaTeX math to Unicode characters
- * Currently handles superscripts like e+e- -> e⁺e⁻
- * @param {string} text - The text to convert
- * @returns {string} - Converted text
- */
-function convertLatexToUnicode(text) {
-	if (!text) return text;
-	
-	// Simple superscript mapping
-	const superscriptMap = {
-		'0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
-		'5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
-		'+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
-		'n': 'ⁿ', 'i': 'ⁱ'
-	};
-
-	// Subscript mapping
-	const subscriptMap = {
-		'0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
-		'5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
-		'+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
-		'a': 'ₐ', 'e': 'ₑ', 'o': 'ₒ', 'x': 'ₓ', 'h': 'ₕ',
-		'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'p': 'ₚ',
-		's': 'ₛ', 't': 'ₜ'
-	};
-
-	// Helper to replace mapped characters
-	function mapChars(str, map) {
-		return str.split('').map(c => map[c] || c).join('');
-	}
-
-	// Replace inline math $...$ or \(...\)
-	// We focus on common particle physics patterns like e^{+}, e^{-}, J/\psi
-	// Note: This is a basic implementation. Complex LaTeX requires a full parser.
-	
-	return text.replace(/(\$|\\\()([^\$]+?)(\$|\\\))/g, (match, start, content, end) => {
-		let converted = content;
-		
-		// Handle superscripts ^{...} or ^x
-		converted = converted.replace(/\^\{([^}]+)\}/g, (m, p1) => mapChars(p1, superscriptMap));
-		converted = converted.replace(/\^([0-9a-zA-Z\+\-\(\)])/g, (m, p1) => mapChars(p1, superscriptMap));
-		
-		// Handle subscripts _{...} or _x
-		converted = converted.replace(/_\{([^}]+)\}/g, (m, p1) => mapChars(p1, subscriptMap));
-		converted = converted.replace(/_([0-9a-zA-Z\+\-\(\)])/g, (m, p1) => mapChars(p1, subscriptMap));
-		
-		// Remove latex commands commonly used in particle names
-		converted = converted.replace(/\\(psi|phi|rho|omega|pi|eta|mu|tau|nu|lambda|sigma|xi|gamma|delta|alpha|beta)/gi, (m, p1) => {
-			const greekMap = {
-				'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε', 'zeta': 'ζ',
-				'eta': 'η', 'theta': 'θ', 'iota': 'ι', 'kappa': 'κ', 'lambda': 'λ', 'mu': 'μ',
-				'nu': 'ν', 'xi': 'ξ', 'omicron': 'ο', 'pi': 'π', 'rho': 'ρ', 'sigma': 'σ',
-				'tau': 'τ', 'upsilon': 'υ', 'phi': 'ϕ', 'chi': 'χ', 'psi': 'ψ', 'omega': 'ω',
-				'Gamma': 'Γ', 'Delta': 'Δ', 'Theta': 'Θ', 'Lambda': 'Λ', 'Xi': 'Ξ',
-				'Pi': 'Π', 'Sigma': 'Σ', 'Phi': 'Φ', 'Psi': 'Ψ', 'Omega': 'Ω'
-			};
-			return greekMap[p1] || greekMap[p1.toLowerCase()] || m;
-		});
-		
-		// Handle \bar{...} -> ... with combining macron? Or just clean it for now?
-		// Simple approach for anti-particles: \bar{p} -> p̅ (combining overline \u0305)
-		converted = converted.replace(/\\bar\{([^}]+)\}/g, '$1\u0305');
-		
-		// Remove whitespace
-		converted = converted.replace(/\s+/g, '');
-		
-		// Remove remaining backslashes for simple commands
-		converted = converted.replace(/\\/g, '');
-		
-		return converted;
-	});
-}
-
-/**
  * Helper function to get text from a CSS selector
  * @param {Document} doc - The document object
  * @param {string} selector - CSS selector
  * @returns {string|null} - Text content or null
  */
-function text(doc, selector) {
+function getText(doc, selector) {
 	let elem = doc.querySelector(selector);
 	return elem ? ZU.trimInternal(elem.textContent) : null;
 }
@@ -137,18 +63,51 @@ function detectWeb(doc, url) {
 		if (getSearchResults(doc, true)) {
 			return 'multiple';
 		}
-		
+
 		// Fallback: if it looks like an Indico event page (via meta tags), we can likely use the API
 		// Look for Indico signature
-		let isIndico = doc.querySelector('meta[property="og:site_name"][content="Indico"]') || 
-					   doc.querySelector('link[href*="indico.ico"]') ||
-					   (doc.title && doc.title.includes('Indico'));
-					   
+		let isIndico = doc.querySelector('meta[property="og:site_name"][content="Indico"]')
+			|| doc.querySelector('link[href*="indico.ico"]')
+				|| (doc.title && doc.title.includes('Indico'));
+
 		if (isIndico) {
 			return 'multiple';
 		}
 	}
 	return false;
+}
+
+/**
+ * Process and add a creator to the item
+ * @param {Zotero.Item} item - The item to add the creator to
+ * @param {string} name - The raw name string
+ * @param {string} type - The creator type (e.g., 'presenter')
+ */
+function processCreator(item, name, type) {
+	if (!name) return;
+
+	// 1. Remove parentheses and their content
+	let cleanName = name.replace(/\([^)]*\)/g, '');
+
+	// 2. Remove titles (Prof., Dr., etc.)
+	// Add more titles if needed. delimiting with word boundaries or spaces.
+	cleanName = cleanName.replace(/\b(Prof|Dr|Mr|Mrs|Ms)\.?\s+/gi, '');
+
+	cleanName = ZU.trimInternal(cleanName);
+	if (!cleanName) return;
+
+	// 3. Check for Chinese characters
+	// Common CJK range
+	if (/[\u4e00-\u9fa5]/.test(cleanName)) {
+		item.creators.push({
+			lastName: cleanName,
+			creatorType: type,
+			fieldMode: 1
+		});
+	}
+	else {
+		item.creators.push(ZU.cleanAuthor(cleanName, type, false));
+	}
 }
 
 /**
@@ -158,12 +117,12 @@ function detectWeb(doc, url) {
  */
 function cleanMathTitle(title) {
 	if (!title) return "";
-	
+
 	let text = title;
 
 	// Handle explicit LaTeX formatting commands
 	text = text.replace(/\\(text|mathrm|bf|it)\{([^}]+)\}/g, '$2'); // Remove formatting wrappers
-	
+
 	// Superscripts
 	text = text.replace(/\^\{([^}]+)\}/g, (match, content) => {
 		content = cleanMathTitle(content);
@@ -171,10 +130,10 @@ function cleanMathTitle(title) {
 	});
 	// Handle single char superscripts including special chars and commands
 	const superscriptMap = {
-		'0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
-		'5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+		0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴',
+		5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹',
 		'+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
-		'n': 'ⁿ', 'i': 'ⁱ'
+		n: 'ⁿ', i: 'ⁱ'
 	};
 	text = text.replace(/\^([0-9a-zA-Z+\-*])|\^\\(pm|mp)/g, (match, char, latex) => {
 		if (char && superscriptMap[char]) return superscriptMap[char];
@@ -191,21 +150,21 @@ function cleanMathTitle(title) {
 	});
 	// Handle single char subscripts including special chars and commands
 	const subscriptMap = {
-		'0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
-		'5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+		0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄',
+		5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉',
 		'+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
-		'a': 'ₐ', 'e': 'ₑ', 'o': 'ₒ', 'x': 'ₓ', 'h': 'ₕ',
-		'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'p': 'ₚ',
-		's': 'ₛ', 't': 'ₜ'
+		a: 'ₐ', e: 'ₑ', o: 'ₒ', x: 'ₓ', h: 'ₕ',
+		k: 'ₖ', l: 'ₗ', m: 'ₘ', n: 'ₙ', p: 'ₚ',
+		s: 'ₛ', t: 'ₜ'
 	};
-	text = text.replace(/_([0-9a-zA-Z+\-*])|\_\\(pm|mp)/g, (match, char, latex) => {
+	text = text.replace(/_([0-9a-zA-Z+\-*])|_\\(pm|mp)/g, (match, char, latex) => {
 		if (char && subscriptMap[char]) return subscriptMap[char];
 		if (char) return `<sub>${char}</sub>`;
 		if (latex === 'pm') return '<sub>±</sub>';
 		if (latex === 'mp') return '<sub>∓</sub>';
 		return match;
 	});
-	
+
 	// Greek letters (add more as needed)
 	const greek = {
 		'\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ', '\\epsilon': 'ε',
@@ -216,13 +175,13 @@ function cleanMathTitle(title) {
 		'\\Gamma': 'Γ', '\\Delta': 'Δ', '\\Theta': 'Θ', '\\Lambda': 'Λ', '\\Xi': 'Ξ',
 		'\\Pi': 'Π', '\\Sigma': 'Σ', '\\Upsilon': 'Υ', '\\Phi': 'Φ', '\\Psi': 'Ψ', '\\Omega': 'Ω'
 	};
-	
+
 	for (let [tex, char] of Object.entries(greek)) {
 		// Replace whole word matches or distinct latex commands
 		let re = new RegExp(tex.replace('\\', '\\\\') + '(?![a-zA-Z])', 'g');
 		text = text.replace(re, char);
 	}
-	
+
 	// Common particles and arrows
 	text = text.replace(/\\to/g, '→')
 		.replace(/\\rightarrow/g, '→')
@@ -251,72 +210,288 @@ function cleanMathTitle(title) {
 		.replace(/\\dagger/g, '†')
 		.replace(/\\bar\{([^}]+)\}/g, '$1\u0304')
 		.replace(/->/g, '→');
-		
+
 	// Cleanup standard e+e- notation specifically mentioned
 	// e^{+}e^{-} -> e⁺e⁻
 	// Handles $...$ wrappers
 	text = text.replace(/\$([^$]+)\$/g, (match, content) => {
 		// Remove internal spaces in math mode
 		content = content.replace(/\s+/g, '');
-		
+
 		// Apply the same cleaning to content inside $...$
 		// We recurse lightly or just apply same logic
 		let clean = content.replace(/\^\{?\+?\}?/g, '⁺')
-			.replace(/\^\{?\-\}?/g, '⁻')
+			.replace(/\^\{?-?\}?/g, '⁻')
 			.replace(/e\^/g, 'e') // Catch e^+ cases processed above
 			.replace(/\\/g, ''); // Remove remaining backslashes for simple commands
-			
+
 		return clean;
 	});
 
 	// Cleanup generic latex braces and dollars if any remain
 	text = text.replace(/(\$|\\{|\\})/g, '');
-	
+
 	// Fix specific case: e+ e- usually implies e⁺ e⁻
 	// This regex looks for 'e' followed immediately by + or -
-	// But we already handled ^+ and ^- above. 
+	// But we already handled ^+ and ^- above.
 	// Handle explicit "e+" "e-" in text if they weren't latex
 	// Careful not to replace regular words.
-	
+
 	return ZU.trimInternal(text);
+}
+
+/**
+ * Parse the JSON-like timetable payload emitted by older Indico versions.
+ * Those pages use JavaScript identity escapes (e.g. `\ `) that JSON.parse
+ * rejects, so normalize the string literals without evaluating page code.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeJavaScriptStrings(text) {
+	let output = '';
+	let quoted = false;
+
+	for (let i = 0; i < text.length; i++) {
+		let char = text[i];
+		if (!quoted) {
+			output += char;
+			if (char === '"') quoted = true;
+			continue;
+		}
+
+		if (char === '"') {
+			output += char;
+			quoted = false;
+			continue;
+		}
+		if (char !== '\\') {
+			output += char;
+			continue;
+		}
+
+		let escaped = text[++i];
+		if ('"\\/bfnrt'.includes(escaped)) {
+			output += `\\${escaped}`;
+		}
+		else if (escaped === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(i + 1, i + 5))) {
+			output += `\\u${text.slice(i + 1, i + 5)}`;
+			i += 4;
+		}
+		else if (escaped === 'x' && /^[0-9a-fA-F]{2}$/.test(text.slice(i + 1, i + 3))) {
+			output += `\\u00${text.slice(i + 1, i + 3)}`;
+			i += 2;
+		}
+		else if (escaped === 'v') {
+			output += '\\u000b';
+		}
+		else if (escaped === '\n' || escaped === '\r') {
+			if (escaped === '\r' && text[i + 1] === '\n') i++;
+		}
+		else {
+			output += escaped;
+		}
+	}
+
+	return output;
+}
+
+/**
+ * Extract the second `timetableArgs` argument without executing inline code.
+ *
+ * @param {Document} doc
+ * @returns {Object|null}
+ */
+function getEmbeddedTimetableData(doc) {
+	for (let script of doc.querySelectorAll('script')) {
+		let source = script.textContent;
+		let match = source.match(/var\s+timetableArgs\s*=\s*\[\s*null\s*,\s*/);
+		if (!match) continue;
+
+		let start = match.index + match[0].length;
+		let depth = 0;
+		let quoted = false;
+		let escaped = false;
+		let end = -1;
+		for (let i = start; i < source.length; i++) {
+			let char = source[i];
+			if (quoted) {
+				if (escaped) escaped = false;
+				else if (char === '\\') escaped = true;
+				else if (char === '"') quoted = false;
+			}
+			else if (char === '"') {
+				quoted = true;
+			}
+			else if (char === '{') {
+				depth++;
+			}
+			else if (char === '}' && --depth === 0) {
+				end = i + 1;
+				break;
+			}
+		}
+
+		if (end === -1) continue;
+		try {
+			return JSON.parse(normalizeJavaScriptStrings(source.slice(start, end)));
+		}
+		catch (e) {
+			Zotero.debug("Could not parse embedded Indico timetable: " + e);
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Find contribution objects nested in an Indico timetable payload.
+ *
+ * @param {Object} value
+ * @param {string} baseUrl
+ * @param {Array<Object>} items
+ * @param {boolean} checkOnly
+ * @returns {boolean}
+ */
+function collectTimetableContributions(value, baseUrl, items, checkOnly) {
+	if (!value || typeof value !== 'object') return false;
+
+	if (value.entryType === 'Contribution' && value.url && value.title) {
+		let url = new URL(value.url, baseUrl).href;
+		if (checkOnly) return true;
+		items.push({
+			url,
+			title: cleanMathTitle(value.title),
+			startDate: value.startDate,
+			order: items.length
+		});
+	}
+
+	for (let child of Object.values(value)) {
+		if (collectTimetableContributions(child, baseUrl, items, checkOnly)) return true;
+	}
+
+	return false;
+}
+
+/**
+ * Get a sortable time key from either Indico's ISO date string or its older
+ * {date, time, tz} timetable representation.
+ *
+ * @param {string|Object} startDate
+ * @returns {string}
+ */
+function getTimetableStartKey(startDate) {
+	if (startDate && typeof startDate === 'object' && startDate.date) {
+		return `${startDate.date} ${startDate.time || '00:00:00'}`;
+	}
+	return typeof startDate === 'string' ? startDate : '';
+}
+
+/**
+ * Sort timetable contributions chronologically, retaining the source order
+ * for simultaneous contributions or entries without a scheduled time.
+ *
+ * @param {Array<Object>} contributions
+ * @returns {Array<Object>}
+ */
+function sortTimetableContributions(contributions) {
+	let scheduled = contributions
+		.map((contribution, order) => ({
+			contribution,
+			order,
+			startKey: getTimetableStartKey(
+				contribution.startDate || contribution.start_dt || contribution.start_date
+			)
+		}));
+	scheduled.sort((a, b) => {
+		if (a.startKey && b.startKey && a.startKey !== b.startKey) {
+			return a.startKey < b.startKey ? -1 : 1;
+		}
+		if (!!a.startKey !== !!b.startKey) return a.startKey ? -1 : 1;
+		return a.order - b.order;
+	});
+
+	// Safari Connector preserves the order of numeric keys across its selection
+	// dialog, but not the order of arbitrary URL keys.
+	return scheduled.map(({ contribution }) => ({
+		url: contribution.url,
+		title: contribution.title
+	}));
+}
+
+/**
+ * Get contributions embedded in older Indico timetable pages, which display
+ * clickable blocks without contribution links in the DOM.
+ *
+ * @param {Document} doc
+ * @param {boolean} checkOnly
+ * @returns {Object|boolean}
+ */
+function getEmbeddedTimetableResults(doc, checkOnly) {
+	let timetable = getEmbeddedTimetableData(doc);
+	if (!timetable) return false;
+
+	let contributions = [];
+	let found = collectTimetableContributions(timetable, doc.location.href, contributions, checkOnly);
+	if (found) return true;
+	if (!contributions.length) return false;
+
+	// The payload's object order is not necessarily the programme order. Keep
+	// parallel contributions in their source order while sorting sessions by time.
+	// Use numeric keys instead of URL keys: Safari's Connector preserves this
+	// order in its selection dialog.
+	let seenURLs = new Set();
+	let items = {};
+	for (let contribution of sortTimetableContributions(contributions)) {
+		if (seenURLs.has(contribution.url)) continue;
+		seenURLs.add(contribution.url);
+		items[Object.keys(items).length] = contribution;
+	}
+	return items;
 }
 
 /**
  * Get search results from pages with multiple contributions
  * @param {Document} doc - The document object
  * @param {boolean} checkOnly - Only check if results exist
- * @returns {Object|boolean} - Object of {url: title} pairs or boolean
+ * @returns {Object|boolean} - Selection results or boolean
  */
 function getSearchResults(doc, checkOnly) {
+	// The timetable payload carries the programme order, whereas the rendered
+	// DOM may list contributions in an implementation-specific order.
+	let timetableResults = getEmbeddedTimetableResults(doc, checkOnly);
+	if (timetableResults) return timetableResults;
+
 	let items = {};
 	let found = false;
-	
+
 	// Try multiple selectors to find contribution links
 	let selectors = [
-		'a[href*="/contributions/"]',           // Generic contribution links
-		'.contribution-list a',                  // Contribution list items
-		'.timetable-item a[href*="/contributions/"]',  // Timetable entries
-		'td.contrib-title a',                   // Table-based contribution lists
-		'.contrib-row a',                       // Row-based layouts
-		'article.contribution a',               // Article-based layouts
-		'.session-contrib a[href*="/contributions/"]',  // Session contribution links
-		'.timetable-item .title a',             // Timetable title links
-		'.entry-title a'                        // Generic entry title links
+		'a[href*="/contributions/"]', // Generic contribution links
+		'.contribution-list a', // Contribution list items
+		'.timetable-item a[href*="/contributions/"]', // Timetable entries
+		'td.contrib-title a', // Table-based contribution lists
+		'.contrib-row a', // Row-based layouts
+		'article.contribution a', // Article-based layouts
+		'.session-contrib a[href*="/contributions/"]', // Session contribution links
+		'.timetable-item .title a', // Timetable title links
+		'.entry-title a' // Generic entry title links
 	];
-	
+
 	for (let selector of selectors) {
 		let rows = doc.querySelectorAll(selector);
-		
+
 		for (let row of rows) {
 			let href = row.href;
-			
+
 			// Filter out non-contribution links and ensure valid URL pattern
 			// Also exclude attachments and materials
 			if (!href || !href.match(/\/contributions?\/\d+/) || href.match(/\/attachments\/|\/material\/|\/materials\//)) continue;
-			
+
 			// Get title from link text or nearby elements
 			let title = ZU.trimInternal(row.textContent);
-			
+
 			// If the link itself doesn't have good text, try to find a nearby title
 			if (!title || title.length < 3) {
 				let parentRow = row.closest('tr, li, .contribution, article, .timetable-item, .session-item, .entry, .row');
@@ -327,27 +502,24 @@ function getSearchResults(doc, checkOnly) {
 					}
 				}
 			}
-			
+
 			if (!title || title.length < 3) continue;
 
-			// Clean title Math/LaTeX
-			title = cleanMathTitle(title);
-			
 			// Normalize the URL (remove trailing slashes and fragments)
 			let normalizedUrl = href.split('#')[0].replace(/\/$/, '');
-			
+
 			// Avoid duplicate entries
 			if (items[normalizedUrl]) continue;
-			
+
 			if (checkOnly) return true;
 			found = true;
-			items[normalizedUrl] = title;
+			items[normalizedUrl] = cleanMathTitle(title);
 		}
-		
+
 		// If we found items with this selector, no need to try others
 		if (found) break;
 	}
-	
+
 	return found ? items : false;
 }
 
@@ -360,7 +532,7 @@ async function doWeb(doc, url) {
 	let type = detectWeb(doc, url);
 	if (type == 'multiple') {
 		let items = getSearchResults(doc, false);
-		
+
 		// If we detected 'multiple' but found no items in DOM (e.g. React timetable),
 		// try to fetch from API
 		let eventDataForAttachments = null;
@@ -368,7 +540,7 @@ async function doWeb(doc, url) {
 			let ids = extractIds(url);
 			if (ids.eventId) {
 				// Use the export API to get all contributions
-				// We also need detailed contribution info (attachments) here if possible, 
+				// We also need detailed contribution info (attachments) here if possible,
 				// but standard export API might not give full file details for all items without heavy payload.
 				// Let's get the list first.
 				let apiUrl = `${getBaseUrl(url)}/export/event/${ids.eventId}.json?detail=contributions`;
@@ -379,16 +551,18 @@ async function doWeb(doc, url) {
 						// Handle different API response structures
 						eventDataForAttachments = json.results ? json.results[0] : json;
 						if (eventDataForAttachments && eventDataForAttachments.contributions) {
-							for (let c of eventDataForAttachments.contributions) {
+							for (let c of sortTimetableContributions(eventDataForAttachments.contributions)) {
 								// Use title and ID to form a selection
 								// URL might be in c.url
 								if (c.url && c.title) {
-									items[c.url] = cleanMathTitle(c.title);
+									let contributionUrl = new URL(c.url, getBaseUrl(url)).href;
+									items[contributionUrl] = cleanMathTitle(c.title);
 								}
 							}
 						}
 					}
-				} catch (e) {
+				}
+				catch (e) {
 					Zotero.debug("Indico API fallback failed: " + e);
 				}
 			}
@@ -397,7 +571,9 @@ async function doWeb(doc, url) {
 		if (items && Object.keys(items).length > 0) {
 			let selected = await Zotero.selectItems(items);
 			if (selected) {
-				for (let itemUrl of Object.keys(selected)) {
+				for (let selectedKey of Object.keys(selected)) {
+					let item = items[selectedKey];
+					let itemUrl = item && typeof item === 'object' ? item.url : selectedKey;
 					// If we have the API data cached and it contains this contribution, use it to avoid extra requests
 					// However, scrapeFromContributionJSON expects specific structure.
 					// The 'eventDataForAttachments' might contain the contribution data we need.
@@ -405,19 +581,20 @@ async function doWeb(doc, url) {
 					if (eventDataForAttachments && eventDataForAttachments.contributions) {
 						let selectedId = extractIds(itemUrl).contribId;
 						if (selectedId) {
-							cachedContrib = eventDataForAttachments.contributions.find(c => String(c.id) === String(selectedId));
+							cachedContrib = eventDataForAttachments.contributions.find(c => String(c.db_id || c.id) === String(selectedId));
 						}
 					}
 
 					if (cachedContrib) {
 						// If we have cached data, we can potentially use it directly or pass it to scrape
-						// But scrape() is designed to take a URL. 
+						// But scrape() is designed to take a URL.
 						// Let's modify scrape to accept optional pre-loaded data or just let it re-fetch if robust.
 						// To keep it simple and robust (and ensure full details), we call scrape(null, itemUrl)
 						// which will try JSON/API fetch for that specific item.
 						// The scrape() function already handles fetching JSON for a single item which includes attachments.
 						await scrape(null, itemUrl);
-					} else {
+					}
+					else {
 						await scrape(null, itemUrl);
 					}
 				}
@@ -448,7 +625,7 @@ async function doWeb(doc, url) {
 function extractIds(url) {
 	let eventMatch = url.match(/\/event\/(\d+)/);
 	let contribMatch = url.match(/\/contributions?\/(\d+)/);
-	
+
 	return {
 		eventId: eventMatch ? eventMatch[1] : null,
 		contribId: contribMatch ? contribMatch[1] : null
@@ -466,6 +643,19 @@ function getBaseUrl(url) {
 }
 
 /**
+ * Normalize the string and object date formats returned by different Indico versions
+ * @param {string|Object} value - Date value from an Indico API
+ * @returns {string|null} - ISO date or null
+ */
+function normalizeDate(value) {
+	if (!value) return null;
+	if (typeof value === 'object') {
+		value = value.date || value.datetime || value.dateTime;
+	}
+	return value ? ZU.strToISO(value) : null;
+}
+
+/**
  * Scrape contribution data from Indico page or API
  * @param {Document} [doc] - The document object (optional)
  * @param {string} url - The URL to scrape
@@ -473,7 +663,7 @@ function getBaseUrl(url) {
 async function scrape(doc, url) {
 	let ids = extractIds(url);
 	let baseUrl = getBaseUrl(url);
-	
+
 	if (!ids.eventId || !ids.contribId) {
 		Zotero.debug("Could not extract event ID or contribution ID from URL: " + url);
 		return;
@@ -482,7 +672,7 @@ async function scrape(doc, url) {
 	// Priority 1: Try direct Contribution JSON (e.g., .../contributions/123.json)
 	// This is most accurate for single contribution metadata
 	let jsonUrl = url.split('#')[0].split('?')[0].replace(/\/$/, '') + '.json';
-	
+
 	try {
 		// When scraping from a list (doc is null), ensure we fetch the full contribution page or JSON
 		// to get attachments if the initial JSON fails or is incomplete.
@@ -496,11 +686,11 @@ async function scrape(doc, url) {
 	catch (e) {
 		Zotero.debug("Direct contribution JSON failed: " + e);
 	}
-	
+
 	// Priority 2: Try old Indico Export API
 	// Indico API endpoint format: /export/event/{event_id}.json?detail=contributions
 	let apiUrl = `${baseUrl}/export/event/${ids.eventId}.json?detail=contributions&pretty=yes`;
-	
+
 	try {
 		let json = await requestJSON(apiUrl);
 		await scrapeFromAPI(json, url, baseUrl, ids);
@@ -512,8 +702,9 @@ async function scrape(doc, url) {
 		if (!doc) {
 			try {
 				doc = await requestDocument(url);
-			} catch(e) {
-				Zotero.debug("Could not fetch contribution page: " + e);
+			}
+			catch (e2) {
+				Zotero.debug("Could not fetch contribution page: " + e2);
 				return;
 			}
 		}
@@ -531,17 +722,14 @@ async function scrape(doc, url) {
  */
 async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
 	let item = new Zotero.Item('presentation');
-	
+
 	// Title
 	item.title = cleanMathTitle(json.title);
-	
+
 	// Date
-	if (json.start_dt) {
-		item.date = ZU.strToISO(json.start_dt);
-	} else if (json.date) {
-		item.date = ZU.strToISO(json.date);
-	}
-	
+	let date = normalizeDate(json.start_dt || json.startDate || json.start_date || json.date);
+	if (date) item.date = date;
+
 	// Presenters / Authors
 	// Look for persons list
 	let persons = json.persons || json.presenters || json.speakers || [];
@@ -551,38 +739,44 @@ async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
 			if (person.is_speaker || persons.length === 1 || !persons.some(p => p.is_speaker)) {
 				let firstName = person.first_name || person.firstName;
 				let lastName = person.last_name || person.lastName;
-				let fullName = person.full_name || person.fullName || person.name;
-				
+				let fullName;
 				if (firstName && lastName) {
-					item.creators.push({
-						firstName: firstName,
-						lastName: lastName,
-						creatorType: 'presenter'
-					});
-				} else if (fullName) {
-					item.creators.push(ZU.cleanAuthor(fullName, 'presenter', false));
+					fullName = `${firstName} ${lastName}`;
+				}
+				else {
+					fullName = person.full_name || person.fullName || person.name;
+				}
+
+				if (fullName) {
+					processCreator(item, fullName, 'presenter');
+				}
+				else if (firstName && lastName) {
+					// Fallback if fullName construction failed for some reason (though above covers it)
+					// or if we want to keep separate fields (but we want to process them)
+					// Constructing full name is safer for uniform processing
+					processCreator(item, `${firstName} ${lastName}`, 'presenter');
 				}
 			}
 		}
 	}
-	
+
 	// Place
 	let placeParts = [];
 	if (json.venue_name) placeParts.push(json.venue_name);
 	if (json.room_name) placeParts.push(json.room_name);
 	if (json.location) placeParts.push(json.location);
 	if (json.address) placeParts.push(json.address);
-	
+
 	if (placeParts.length > 0) {
 		item.place = placeParts.join(', ');
 	}
-	
+
 	// Abstract
 	if (json.description) {
 		// Description often contains HTML
 		item.abstractNote = ZU.cleanTags(json.description);
 	}
-	
+
 	// Meeting Name
 	// Usually not in contribution JSON, try to get from doc or fallback
 	if (doc) {
@@ -610,7 +804,7 @@ async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
 			}
 		}
 	}
-	
+
 	// If still no meeting name, try to fetch basic event info
 	if (!item.meetingName) {
 		try {
@@ -619,11 +813,12 @@ async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
 			if (eventJson && eventJson.results && eventJson.results[0] && eventJson.results[0].title) {
 				item.meetingName = eventJson.results[0].title;
 			}
-		} catch (e) {
+		}
+		catch (e) {
 			// Ignore
 		}
 	}
-	
+
 	// Attachments
 	// The contribution JSON might contain folders/files
 	let folders = json.folders || json.files || [];
@@ -643,12 +838,13 @@ async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
 			}
 		}
 	}
-	
+
 	// If no attachments found in JSON, try to scrape them from HTML page if doc is not provided
 	if (item.attachments.length === 0 && !doc) {
 		try {
 			doc = await requestDocument(url);
-		} catch (e) {
+		}
+		catch (e) {
 			Zotero.debug("Could not fetch contribution page for attachments: " + e);
 		}
 	}
@@ -663,13 +859,12 @@ async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
 			for (let link of attachmentLinks) {
 				let attachUrl = link.href;
 				let attachTitle = ZU.trimInternal(link.textContent) || 'Attachment';
-				
+
 				// Verify it's a contribution attachment (has contribId in URL)
 				// Event attachments: /event/123/attachments/...
 				// Contribution attachments: /event/123/contributions/456/attachments/...
-				if (attachUrl && (attachUrl.includes(`/contributions/${ids.contribId}/`) || attachUrl.includes(`/contribution/${ids.contribId}/`)) && 
-					(attachUrl.includes('.pdf') || attachUrl.includes('/attachments/') || attachUrl.includes('/material/'))) {
-					
+				if (attachUrl && (attachUrl.includes(`/contributions/${ids.contribId}/`) || attachUrl.includes(`/contribution/${ids.contribId}/`))
+					&& (attachUrl.includes('.pdf') || attachUrl.includes('/attachments/') || attachUrl.includes('/material/'))) {
 					// Avoid dupes if possible
 					if (!item.attachments.some(a => a.url === attachUrl)) {
 						item.attachments.push({
@@ -682,7 +877,7 @@ async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
 			}
 		}
 	}
-	
+
 	// Snapshot
 	if (doc) {
 		item.attachments.push({
@@ -691,7 +886,7 @@ async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
 			mimeType: 'text/html'
 		});
 	}
-	
+
 	item.url = url;
 	item.complete();
 }
@@ -705,11 +900,11 @@ async function scrapeFromContributionJSON(json, doc, url, baseUrl, ids) {
  */
 async function scrapeFromAPI(json, url, baseUrl, ids) {
 	let item = new Zotero.Item('presentation');
-	
+
 	// Navigate to the contribution data in the JSON structure
 	let contribution = null;
 	let event = null;
-	
+
 	// Indico API can return different structures
 	if (json.results && json.results.length > 0) {
 		event = json.results[0];
@@ -718,55 +913,50 @@ async function scrapeFromAPI(json, url, baseUrl, ids) {
 		// Sometimes the event is directly in the json object
 		event = json;
 	}
-	
+
 	if (event && event.contributions) {
 		// Find the specific contribution by ID (convert both to strings for comparison)
-		contribution = event.contributions.find(c => String(c.id) === String(ids.contribId));
+		contribution = event.contributions.find(c => String(c.db_id || c.id) === String(ids.contribId));
 	}
-	
+
 	if (contribution) {
 		// Title
 		item.title = cleanMathTitle(contribution.title || '');
-		
+
 		// Presenters/Speakers - try multiple field names
 		let speakers = contribution.speakers || contribution.presenters || contribution.authors || [];
 		if (speakers && speakers.length > 0) {
 			for (let speaker of speakers) {
 				// Try different name field formats
-				let name = speaker.fullName || speaker.full_name || speaker.name || '';
-				if (!name && speaker.first_name && speaker.last_name) {
+				let name = '';
+				if (speaker.first_name && speaker.last_name) {
 					name = `${speaker.first_name} ${speaker.last_name}`;
 				}
-				if (!name && speaker.firstName && speaker.lastName) {
+				else if (speaker.firstName && speaker.lastName) {
 					name = `${speaker.firstName} ${speaker.lastName}`;
 				}
-				
+				else {
+					name = speaker.fullName || speaker.full_name || speaker.name || '';
+				}
+
 				if (name) {
-					// Use cleanAuthor to properly parse the name
-					let creator = ZU.cleanAuthor(name, 'presenter', false);
-					if (!creator.firstName && !creator.lastName) {
-						// If cleanAuthor failed, use the name as lastName
-						creator = { lastName: name, creatorType: 'presenter', fieldMode: 1 };
-					}
-					item.creators.push(creator);
+					processCreator(item, name, 'presenter');
 				}
 			}
 		}
-		
+
 		// Date - try multiple field names
-		let dateStr = contribution.startDate || contribution.start_date || contribution.date;
-		if (dateStr) {
-			item.date = ZU.strToISO(dateStr);
-		}
-		
+		let date = normalizeDate(contribution.startDate || contribution.start_date || contribution.date);
+		if (date) item.date = date;
+
 		// Meeting/Conference name
 		if (event.title) {
 			item.meetingName = event.title;
 		}
-		
+
 		// Place/Location - combine multiple location fields
 		let locationParts = [];
-		
+
 		if (contribution.location || event.location) {
 			locationParts.push(contribution.location || event.location);
 		}
@@ -776,16 +966,16 @@ async function scrapeFromAPI(json, url, baseUrl, ids) {
 		if (contribution.address || event.address) {
 			locationParts.push(contribution.address || event.address);
 		}
-		
+
 		if (locationParts.length > 0) {
 			item.place = locationParts.join(', ');
 		}
-		
+
 		// Abstract/Description
 		if (contribution.description) {
 			item.abstractNote = ZU.cleanTags(contribution.description);
 		}
-		
+
 		// Attachments - try multiple field names
 		let folders = contribution.folders || contribution.materials || contribution.attachments || [];
 		if (folders && folders.length > 0) {
@@ -796,7 +986,7 @@ async function scrapeFromAPI(json, url, baseUrl, ids) {
 						let attachUrl = attachment.download_url || attachment.url;
 						let attachTitle = attachment.title || attachment.filename || attachment.name || 'Attachment';
 						let mimeType = attachment.content_type || attachment.type || 'application/pdf';
-						
+
 						if (attachUrl) {
 							item.attachments.push({
 								title: attachTitle,
@@ -808,17 +998,17 @@ async function scrapeFromAPI(json, url, baseUrl, ids) {
 				}
 			}
 		}
-		
+
 		// Add snapshot
 		item.attachments.push({
 			title: 'Snapshot',
 			document: await requestDocument(url),
 			mimeType: 'text/html'
 		});
-		
+
 		// URL
 		item.url = url;
-		
+
 		item.complete();
 	}
 	else {
@@ -838,27 +1028,32 @@ async function scrapeFromAPI(json, url, baseUrl, ids) {
  */
 async function scrapeFromHTML(doc, url, baseUrl, ids) {
 	let item = new Zotero.Item('presentation');
-	
+
 	// Title - try multiple selectors
 	// Priority: Contribution title -> H1 -> Page Title
-	let title = text(doc, 'h1.contribution-title')
-		|| text(doc, '.item-title')
-		|| text(doc, '.contribution-title')
-		|| text(doc, 'h1[itemprop="name"]');
-		
+	let title = getText(doc, 'h1.contribution-title')
+		|| getText(doc, '.item-title')
+		|| getText(doc, '.contribution-title')
+		|| getText(doc, 'h1[itemprop="name"]')
+		// Support for older Indico versions / Standard theme
+		|| getText(doc, '.conference-page .title h2')
+		|| getText(doc, '.title-with-actions h2')
+		|| getText(doc, '.conference-page .title .text')
+		|| getText(doc, '.conference-page .title');
+
 	if (!title) {
-		let h1 = text(doc, 'h1');
+		let h1 = getText(doc, 'h1');
 		if (h1 && !h1.includes('Indico')) {
 			title = h1;
 		}
 	}
-	
+
 	item.title = cleanMathTitle(title || '');
-	
+
 	// Presenters/Speakers
 	// Look for speaker list specifically to avoid confusion with other names
 	let speakerElements = doc.querySelectorAll('.speaker-list .speaker-item, .speaker-list a, .contribution-speakers .speaker-name, .presenter-list .name');
-	
+
 	if (speakerElements.length === 0) {
 		// Fallback: try searching for "Speaker" label
 		let labels = doc.querySelectorAll('dt, .label, strong');
@@ -867,26 +1062,28 @@ async function scrapeFromHTML(doc, url, baseUrl, ids) {
 				let value = label.nextElementSibling || label.parentElement.querySelector('dd, .value');
 				if (value) {
 					let name = ZU.trimInternal(value.textContent);
-					if (name) item.creators.push(ZU.cleanAuthor(name, 'presenter', false));
+					processCreator(item, name, 'presenter');
 				}
 			}
 		}
-	} else {
+	}
+	else {
 		for (let speakerEl of speakerElements) {
+			// For older Indico, .speaker-item might contain "Prof. Name"
+			// We try to extract the name part if possible, but cleanAuthor handles most prefixes
 			let name = ZU.trimInternal(speakerEl.textContent);
-			if (name) {
-				item.creators.push(ZU.cleanAuthor(name, 'presenter', false));
-			}
+			processCreator(item, name, 'presenter');
 		}
 	}
-	
+
 	// Date
 	// Try meta tags first, then visible elements
 	let dateEl = doc.querySelector('meta[itemprop="startDate"]');
 	if (dateEl) {
 		item.date = ZU.strToISO(dateEl.content);
-	} else {
-		dateEl = doc.querySelector('.contribution-date, .datetime, time, [datetime], .date');
+	}
+	else {
+		dateEl = doc.querySelector('.contribution-date, .datetime, time, [datetime], .date, .time-info');
 		if (dateEl) {
 			let dateText = dateEl.getAttribute('datetime') || dateEl.textContent;
 			if (dateText) {
@@ -894,15 +1091,15 @@ async function scrapeFromHTML(doc, url, baseUrl, ids) {
 			}
 		}
 	}
-	
+
 	// Place/Location
 	let locationEl = doc.querySelector('.contribution-location, .location, .room, .venue');
 	if (locationEl) {
 		item.place = ZU.trimInternal(locationEl.textContent);
 	}
-	
+
 	// Meeting/Conference name
-	let eventTitleEl = doc.querySelector('.event-title a, .breadcrumb .event, .page-title .event');
+	let eventTitleEl = doc.querySelector('.event-title a, .breadcrumb .event, .page-title .event, .confTitle .conference-title-link span[itemprop="title"]');
 	if (eventTitleEl) {
 		item.meetingName = ZU.trimInternal(eventTitleEl.textContent);
 	}
@@ -923,25 +1120,24 @@ async function scrapeFromHTML(doc, url, baseUrl, ids) {
 			}
 		}
 	}
-	
+
 	// Abstract
 	let abstractEl = doc.querySelector('.contribution-description, .description, .abstract, [itemprop="description"]');
 	if (abstractEl) {
 		item.abstractNote = ZU.trimInternal(abstractEl.textContent);
 	}
-	
+
 	// Attachments
 	let attachmentLinks = doc.querySelectorAll('a[href*="/attachments/"], a[href*="/material/"], a.attachment-link, a[href$=".pdf"]');
 	for (let link of attachmentLinks) {
 		let attachUrl = link.href;
 		let attachTitle = ZU.trimInternal(link.textContent) || 'Attachment';
-		
+
 		// Only include attachments that belong to this specific contribution
 		// Pattern: .../contributions/{id}/...
-		if (attachUrl && 
-			(attachUrl.includes(`/contributions/${ids.contribId}/`) || attachUrl.includes(`/contribution/${ids.contribId}/`)) &&
-			(attachUrl.includes('.pdf') || attachUrl.includes('/attachments/') || attachUrl.includes('/material/'))) {
-			
+		if (attachUrl
+			&& (attachUrl.includes(`/contributions/${ids.contribId}/`) || attachUrl.includes(`/contribution/${ids.contribId}/`))
+			&& (attachUrl.includes('/attachments/') || attachUrl.includes('/material/'))) {
 			item.attachments.push({
 				title: attachTitle,
 				url: attachUrl,
@@ -949,45 +1145,27 @@ async function scrapeFromHTML(doc, url, baseUrl, ids) {
 			});
 		}
 	}
-	
+
 	// Always add snapshot
 	item.attachments.push({
 		title: 'Snapshot',
 		document: doc,
 		mimeType: 'text/html'
 	});
-	
+
 	// URL
 	item.url = url;
-	
+
 	item.complete();
-}
-
-/**
- * Helper to make an HTTP request and return JSON
- * @param {string} url - The URL to request
- * @returns {Object} - The parsed JSON
- */
-async function requestJSON(url) {
-	const response = await Zotero.makeHttpRequest({ url: url, headers: { "Accept": "application/json" } });
-	if (response.status !== 200) throw new Error("HTTP " + response.status);
-	return JSON.parse(response.responseText);
-}
-
-/**
- * Helper to make an HTTP request and return a Document
- * @param {string} url - The URL to request
- * @returns {Document} - The parsed document
- */
-async function requestDocument(url) {
-	let response = await Zotero.makeHttpRequest({ url: url });
-	if (response.status !== 200) throw new Error("HTTP " + response.status);
-	let parser = new DOMParser();
-	return parser.parseFromString(response.responseText, "text/html");
 }
 
 /** BEGIN TEST CASES **/
 var testCases = [
+	{
+		"type": "web",
+		"url": "https://indico.ific.uv.es/event/8521/timetable/#all.detailed",
+		"items": "multiple"
+	},
 	{
 		"type": "web",
 		"url": "https://indico.cern.ch/event/1339154/timetable/#20251110.detailed",
@@ -999,7 +1177,6 @@ var testCases = [
 		"items": [
 			{
 				"itemType": "presentation",
-				"title": "The J/ψJ/ψ-nucleon interaction mechanism: A theoretical study based on  scattering length",
 				"creators": [
 					{
 						"firstName": "Feng-Kun",
@@ -1007,18 +1184,53 @@ var testCases = [
 						"creatorType": "presenter"
 					}
 				],
-				"date": "2025-11-18",
-				"meetingName": "Quarkonium Working Group Workshop",
-				"place": "CERN, 500/1-001 - Main Auditorium",
-				"shortTitle": "The J/ψJ/ψ-nucleon interaction mechanism",
-				"url": "https://indico.cern.ch/event/1539475/contributions/6775678/",
+				"notes": [],
+				"tags": [],
+				"seeAlso": [],
 				"attachments": [
 					{
-						"title": "QWG17 at CERN poster",
+						"title": "JpsiNucleon_QWG_FKGuo.pdf",
 						"mimeType": "application/pdf"
 					},
 					{
-						"title": "JpsiNucleon_QWG_FKGuo.pdf",
+						"title": "Snapshot",
+						"mimeType": "text/html"
+					}
+				],
+				"title": "The J/ψJ/ψ-nucleon interaction mechanism: A theoretical study based on scattering length",
+				"date": "2025-11-18",
+				"place": "CERN, 500/1-001 - Main Auditorium",
+				"meetingName": "Quarkonium Working Group Workshop",
+				"url": "https://indico.cern.ch/event/1539475/contributions/6775678/",
+				"shortTitle": "The J/ψJ/ψ-nucleon interaction mechanism"
+			}
+		]
+	},
+	{
+		"type": "web",
+		"url": "https://indico.cern.ch/event/1539475/timetable/#20251117.detailed",
+		"items": "multiple"
+	},
+	{
+		"type": "web",
+		"url": "https://indico.itp.ac.cn/event/324/contributions/2059/",
+		"items": [
+			{
+				"itemType": "presentation",
+				"title": "格点QCD进展综述",
+				"creators": [
+					{
+						"lastName": "川 刘",
+						"creatorType": "presenter",
+						"fieldMode": 1
+					}
+				],
+				"date": "2025-10-10",
+				"meetingName": "第五届中国格点量子色动力学研讨会",
+				"url": "https://indico.itp.ac.cn/event/324/contributions/2059/",
+				"attachments": [
+					{
+						"title": "1.刘川-格点QCD进展综述.pdf",
 						"mimeType": "application/pdf"
 					},
 					{
@@ -1031,11 +1243,6 @@ var testCases = [
 				"seeAlso": []
 			}
 		]
-	},
-	{
-		"type": "web",
-		"url": "https://indico.cern.ch/event/1539475/timetable/#20251117.detailed",
-		"items": "multiple"
 	}
 ]
 /** END TEST CASES **/
